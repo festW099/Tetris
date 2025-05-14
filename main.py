@@ -6,16 +6,16 @@ import json
 pygame.init()
 pygame.mixer.init()
 
-# Размеры
 CELL = 30
 COLS, ROWS = 10, 20
-WIDTH, HEIGHT = COLS * CELL, ROWS * CELL
+SIDE_PANEL = 200
+WIDTH, HEIGHT = COLS * CELL + SIDE_PANEL, ROWS * CELL
 
-# Цвета
-BLACK = (0, 0, 0)
-GRAY = (50, 50, 50)
+BLACK = (10, 10, 10)
 WHITE = (255, 255, 255)
-GHOST = (150, 150, 150)
+GHOST = (100, 100, 100)
+BUTTON_COLOR = (30, 30, 30)
+BUTTON_HOVER = (70, 70, 70)
 COLORS = [
     (0, 255, 255), (0, 0, 255), (255, 165, 0),
     (255, 255, 0), (0, 255, 0), (128, 0, 128), (255, 0, 0)
@@ -36,6 +36,11 @@ pygame.display.set_caption("Tetris")
 
 SAVE_FILE = "savegame.json"
 HIGHSCORE_FILE = "highscore.txt"
+
+grid = [[0] * COLS for _ in range(ROWS)]
+score = 0
+level = 1
+paused = False
 
 class Tetromino:
     def __init__(self):
@@ -84,20 +89,6 @@ class Tetromino:
                 if cell and self.y + i >= 0:
                     grid[self.y + i][self.x + j] = self.color
 
-def draw_grid():
-    for y in range(ROWS):
-        for x in range(COLS):
-            if grid[y][x]:
-                pygame.draw.rect(screen, grid[y][x], (x*CELL, y*CELL, CELL, CELL))
-            pygame.draw.rect(screen, GRAY, (x*CELL, y*CELL, CELL, CELL), 1)
-
-def draw_ghost(tetromino):
-    ghost_y = tetromino.drop_y()
-    for i, row in enumerate(tetromino.shape):
-        for j, cell in enumerate(row):
-            if cell:
-                pygame.draw.rect(screen, GHOST, ((tetromino.x + j)*CELL, (ghost_y + i)*CELL, CELL, CELL), 1)
-
 def clear_rows():
     global grid
     cleared = 0
@@ -108,23 +99,27 @@ def clear_rows():
     grid = new_grid
     return cleared
 
-def draw_text(text, y, size=30):
+def draw_text(text, x, y, size=30):
     font = pygame.font.SysFont("Arial", size)
     surf = font.render(text, True, WHITE)
-    rect = surf.get_rect(center=(WIDTH//2, y))
-    screen.blit(surf, rect)
+    screen.blit(surf, (x, y))
 
-def save_game():
-    with open(SAVE_FILE, "w") as f:
-        json.dump({"grid": grid, "score": score, "level": level}, f)
+def draw_button(text, x, y, w, h, mouse_pos):
+    rect = pygame.Rect(x, y, w, h)
+    color = BUTTON_HOVER if rect.collidepoint(mouse_pos) else BUTTON_COLOR
+    pygame.draw.rect(screen, color, rect, border_radius=8)
+    pygame.draw.rect(screen, WHITE, rect, 2, border_radius=8)
+    label = font.render(text, True, WHITE)
+    label_rect = label.get_rect(center=rect.center)
+    screen.blit(label, label_rect)
+    return rect
 
-def load_game():
-    global grid, score, level
-    with open(SAVE_FILE) as f:
-        data = json.load(f)
-        grid = data["grid"]
-        score = data["score"]
-        level = data["level"]
+def draw_ghost(tetromino):
+    ghost_y = tetromino.drop_y()
+    for i, row in enumerate(tetromino.shape):
+        for j, cell in enumerate(row):
+            if cell:
+                pygame.draw.rect(screen, GHOST, ((tetromino.x + j)*CELL, (ghost_y + i)*CELL, CELL, CELL), 1)
 
 def load_highscore():
     try:
@@ -140,44 +135,39 @@ def save_highscore(new_score):
             f.write(str(new_score))
 
 def game_loop():
-    global grid, score, level
-    grid = [[0] * COLS for _ in range(ROWS)]
+    global grid, score, level, paused
     clock = pygame.time.Clock()
     current = Tetromino()
     fall_time = 0
     fall_speed = 500
     score = 0
     level = 1
-    running, paused = True, False
 
-    if os.path.exists(SAVE_FILE):
-        load_game()
-
+    running = True
     while running:
         dt = clock.tick(60)
         fall_time += dt
+        mouse_pos = pygame.mouse.get_pos()
+
         for e in pygame.event.get():
             if e.type == pygame.QUIT:
-                save_game()
                 return
-            elif e.type == pygame.KEYDOWN:
-                if e.key == pygame.K_LEFT: current.move(-1, 0)
-                elif e.key == pygame.K_RIGHT: current.move(1, 0)
-                elif e.key == pygame.K_DOWN: current.move(0, 1)
-                elif e.key == pygame.K_UP: current.rotate()
-                elif e.key == pygame.K_SPACE:
-                    while current.move(0, 1): pass
-                    fall_time = fall_speed + 1
-                elif e.key == pygame.K_p:
+            elif e.type == pygame.MOUSEBUTTONDOWN:
+                if pause_btn.collidepoint(mouse_pos):
                     paused = not paused
+            elif e.type == pygame.KEYDOWN:
+                if e.key == pygame.K_ESCAPE:
+                    return
+                if not paused:
+                    if e.key == pygame.K_LEFT: current.move(-1, 0)
+                    elif e.key == pygame.K_RIGHT: current.move(1, 0)
+                    elif e.key == pygame.K_DOWN: current.move(0, 1)
+                    elif e.key == pygame.K_UP: current.rotate()
+                    elif e.key == pygame.K_SPACE:
+                        while current.move(0, 1): pass
+                        fall_time = fall_speed + 1
 
-        if paused:
-            screen.fill(BLACK)
-            draw_text("PAUSED", HEIGHT//2)
-            pygame.display.flip()
-            continue
-
-        if fall_time > fall_speed:
+        if not paused and fall_time > fall_speed:
             if not current.move(0, 1):
                 current.place()
                 cleared = clear_rows()
@@ -188,39 +178,44 @@ def game_loop():
                 current = Tetromino()
                 if current.collide():
                     save_highscore(score)
-                    save_game()
                     return
             fall_time = 0
 
         screen.fill(BLACK)
-        draw_grid()
+        for y in range(ROWS):
+            for x in range(COLS):
+                if grid[y][x]:
+                    pygame.draw.rect(screen, grid[y][x], (x*CELL, y*CELL, CELL, CELL), border_radius=5)
+
         draw_ghost(current)
         for i, row in enumerate(current.shape):
             for j, cell in enumerate(row):
                 if cell:
-                    pygame.draw.rect(screen, current.color, ((current.x + j)*CELL, (current.y + i)*CELL, CELL, CELL))
+                    pygame.draw.rect(screen, current.color, ((current.x + j)*CELL, (current.y + i)*CELL, CELL, CELL), border_radius=5)
 
-        screen.blit(font.render(f"Score: {score}", True, WHITE), (10, 10))
-        screen.blit(font.render(f"Level: {level}", True, WHITE), (10, 30))
-        screen.blit(font.render(f"Highscore: {load_highscore()}", True, WHITE), (10, 50))
+        panel_x = COLS * CELL + 20
+        draw_text(f"Score: {score}", panel_x, 40)
+        draw_text(f"Level: {level}", panel_x, 80)
+        draw_text(f"Highscore: {load_highscore()}", panel_x, 120)
+
+        pause_btn = draw_button("Pause" if not paused else "Resume", panel_x, 160, 120, 40, mouse_pos)
         pygame.display.flip()
 
 def menu():
     while True:
         screen.fill(BLACK)
-        draw_text("TETRIS", HEIGHT // 3, 40)
-        draw_text("1. Play", HEIGHT // 2)
-        draw_text("2. Exit", HEIGHT // 2 + 40)
-        draw_text("P - Pause, SPACE - Drop", HEIGHT - 30, 18)
+        mouse_pos = pygame.mouse.get_pos()
+        play_btn = draw_button("Play", WIDTH//2 - 60, HEIGHT//2, 120, 40, mouse_pos)
+        quit_btn = draw_button("Quit", WIDTH//2 - 60, HEIGHT//2 + 60, 120, 40, mouse_pos)
         pygame.display.flip()
 
         for e in pygame.event.get():
             if e.type == pygame.QUIT:
                 return
-            elif e.type == pygame.KEYDOWN:
-                if e.key == pygame.K_1:
+            elif e.type == pygame.MOUSEBUTTONDOWN:
+                if play_btn.collidepoint(mouse_pos):
                     game_loop()
-                elif e.key == pygame.K_2:
+                elif quit_btn.collidepoint(mouse_pos):
                     return
 
 if __name__ == "__main__":
