@@ -6,20 +6,29 @@ import json
 pygame.init()
 pygame.mixer.init()
 
-CELL = 30
+CELL = 50
 COLS, ROWS = 10, 20
-SIDE_PANEL = 200
+SIDE_PANEL = 600
 WIDTH, HEIGHT = COLS * CELL + SIDE_PANEL, ROWS * CELL
 
-BLACK = (10, 10, 10)
+FESCO_BLUE = (0, 114, 206)
+FESCO_ORANGE = (255, 102, 0)
 WHITE = (255, 255, 255)
-GHOST = (100, 100, 100)
-BUTTON_COLOR = (30, 30, 30)
-BUTTON_HOVER = (70, 70, 70)
+BLACK = (10, 10, 10)
+GHOST = (150, 150, 150)
+BUTTON_COLOR = FESCO_BLUE
+BUTTON_HOVER = FESCO_ORANGE
+
 COLORS = [
-    (0, 255, 255), (0, 0, 255), (255, 165, 0),
-    (255, 255, 0), (0, 255, 0), (128, 0, 128), (255, 0, 0)
+    FESCO_BLUE, FESCO_ORANGE, (255, 255, 255),
+    (0, 153, 153), (153, 102, 51), (128, 128, 128), (0, 51, 102)
 ]
+
+ICONS = [
+    "fish.png", "food.png", "package.png",
+    "ship.png", "anchor.png", "box.png", "globe.png"
+]
+
 SHAPES = [
     [[1, 1, 1, 1]],
     [[1, 0, 0], [1, 1, 1]],
@@ -30,12 +39,14 @@ SHAPES = [
     [[1, 1, 0], [0, 1, 1]]
 ]
 
-font = pygame.font.SysFont("Arial", 20)
+font = pygame.font.SysFont("Agency FB", 24)
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Tetris")
+pygame.display.set_caption("FESCO BLOCKS")
 
 SAVE_FILE = "savegame.json"
 HIGHSCORE_FILE = "highscore.txt"
+
+images = [pygame.transform.scale(pygame.image.load(icon), (CELL, CELL)) for icon in ICONS]
 
 grid = [[0] * COLS for _ in range(ROWS)]
 score = 0
@@ -47,6 +58,7 @@ class Tetromino:
         self.type = random.randint(0, len(SHAPES) - 1)
         self.shape = SHAPES[self.type]
         self.color = COLORS[self.type]
+        self.icon = images[self.type]
         self.x = COLS // 2 - len(self.shape[0]) // 2
         self.y = 0
 
@@ -87,7 +99,7 @@ class Tetromino:
         for i, row in enumerate(self.shape):
             for j, cell in enumerate(row):
                 if cell and self.y + i >= 0:
-                    grid[self.y + i][self.x + j] = self.color
+                    grid[self.y + i][self.x + j] = (self.color, self.icon)
 
 def clear_rows():
     global grid
@@ -100,15 +112,15 @@ def clear_rows():
     return cleared
 
 def draw_text(text, x, y, size=30):
-    font = pygame.font.SysFont("Arial", size)
+    font = pygame.font.SysFont("Agency FB", size, bold=True)
     surf = font.render(text, True, WHITE)
     screen.blit(surf, (x, y))
 
 def draw_button(text, x, y, w, h, mouse_pos):
     rect = pygame.Rect(x, y, w, h)
     color = BUTTON_HOVER if rect.collidepoint(mouse_pos) else BUTTON_COLOR
-    pygame.draw.rect(screen, color, rect, border_radius=8)
-    pygame.draw.rect(screen, WHITE, rect, 2, border_radius=8)
+    pygame.draw.rect(screen, color, rect, border_radius=10)
+    pygame.draw.rect(screen, WHITE, rect, 2, border_radius=10)
     label = font.render(text, True, WHITE)
     label_rect = label.get_rect(center=rect.center)
     screen.blit(label, label_rect)
@@ -119,7 +131,7 @@ def draw_ghost(tetromino):
     for i, row in enumerate(tetromino.shape):
         for j, cell in enumerate(row):
             if cell:
-                pygame.draw.rect(screen, GHOST, ((tetromino.x + j)*CELL, (ghost_y + i)*CELL, CELL, CELL), 1)
+                pygame.draw.rect(screen, GHOST, ((tetromino.x + j)*CELL, (ghost_y + i)*CELL, CELL, CELL), 2, border_radius=3)
 
 def load_highscore():
     try:
@@ -181,32 +193,37 @@ def game_loop():
                     return
             fall_time = 0
 
-        screen.fill(BLACK)
+        screen.fill((8, 18, 28))
         for y in range(ROWS):
             for x in range(COLS):
                 if grid[y][x]:
-                    pygame.draw.rect(screen, grid[y][x], (x*CELL, y*CELL, CELL, CELL), border_radius=5)
+                    color, icon = grid[y][x]
+                    pygame.draw.rect(screen, color, (x*CELL, y*CELL, CELL, CELL), border_radius=4)
+                    screen.blit(icon, (x*CELL, y*CELL))
 
         draw_ghost(current)
         for i, row in enumerate(current.shape):
             for j, cell in enumerate(row):
                 if cell:
-                    pygame.draw.rect(screen, current.color, ((current.x + j)*CELL, (current.y + i)*CELL, CELL, CELL), border_radius=5)
+                    pygame.draw.rect(screen, current.color, ((current.x + j)*CELL, (current.y + i)*CELL, CELL, CELL), border_radius=4)
+                    screen.blit(current.icon, ((current.x + j)*CELL, (current.y + i)*CELL))
 
         panel_x = COLS * CELL + 20
-        draw_text(f"Score: {score}", panel_x, 40)
-        draw_text(f"Level: {level}", panel_x, 80)
-        draw_text(f"Highscore: {load_highscore()}", panel_x, 120)
+        draw_text("FESCO PORT STACK", panel_x, 20, 28)
+        draw_text(f"Containers Loaded: {score}", panel_x, 80)
+        draw_text(f"Port Efficiency: Lv {level}", panel_x, 120)
+        draw_text(f"Best Record: {load_highscore()}", panel_x, 160)
 
-        pause_btn = draw_button("Pause" if not paused else "Resume", panel_x, 160, 120, 40, mouse_pos)
+        pause_btn = draw_button("Dock" if not paused else "Undock", panel_x, 210, 200, 50, mouse_pos)
         pygame.display.flip()
 
 def menu():
     while True:
-        screen.fill(BLACK)
+        screen.fill((8, 18, 28))
         mouse_pos = pygame.mouse.get_pos()
-        play_btn = draw_button("Play", WIDTH//2 - 60, HEIGHT//2, 120, 40, mouse_pos)
-        quit_btn = draw_button("Quit", WIDTH//2 - 60, HEIGHT//2 + 60, 120, 40, mouse_pos)
+        draw_text("FESCO BLOCKS", WIDTH // 2 - 100, HEIGHT // 3, 48)
+        play_btn = draw_button("Start Loading", WIDTH//2 - 100, HEIGHT//2, 200, 50, mouse_pos)
+        quit_btn = draw_button("Exit Port", WIDTH//2 - 100, HEIGHT//2 + 70, 200, 50, mouse_pos)
         pygame.display.flip()
 
         for e in pygame.event.get():
